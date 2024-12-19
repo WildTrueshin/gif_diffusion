@@ -96,16 +96,16 @@ class LoadProcessor:
 class DiffMorpherPipeline(StableDiffusionPipeline):
 
     def __init__(
-            self,
-            vae: AutoencoderKL,
-            text_encoder: CLIPTextModel,
-            tokenizer: CLIPTokenizer,
-            unet: UNet2DConditionModel,
-            scheduler: KarrasDiffusionSchedulers,
-            safety_checker: StableDiffusionSafetyChecker,
-            feature_extractor: CLIPImageProcessor,
-            image_encoder=None,
-            requires_safety_checker: bool = True,
+        self,
+        vae: AutoencoderKL,
+        text_encoder: CLIPTextModel,
+        tokenizer: CLIPTokenizer,
+        unet: UNet2DConditionModel,
+        scheduler: KarrasDiffusionSchedulers,
+        safety_checker: StableDiffusionSafetyChecker,
+        feature_extractor: CLIPImageProcessor,
+        image_encoder=None,
+        requires_safety_checker: bool = True,
     ):
         sig = inspect.signature(super().__init__)
         params = sig.parameters
@@ -146,21 +146,21 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
         alpha_prod_t = self.scheduler.alphas_cumprod[timestep] if timestep >= 0 else self.scheduler.final_alpha_cumprod
         alpha_prod_t_next = self.scheduler.alphas_cumprod[next_step]
         beta_prod_t = 1 - alpha_prod_t
-        pred_x0 = (x - beta_prod_t ** 0.5 * model_output) / alpha_prod_t ** 0.5
+        pred_x0 = (x - beta_prod_t**0.5 * model_output) / alpha_prod_t**0.5
         pred_dir = (1 - alpha_prod_t_next) ** 0.5 * model_output
-        x_next = alpha_prod_t_next ** 0.5 * pred_x0 + pred_dir
+        x_next = alpha_prod_t_next**0.5 * pred_x0 + pred_dir
         return x_next, pred_x0
 
     @torch.no_grad()
     def invert(
-            self,
-            image: torch.Tensor,
-            prompt,
-            num_inference_steps=50,
-            num_actual_inference_steps=None,
-            guidance_scale=1.0,
-            eta=0.0,
-            **kwds,
+        self,
+        image: torch.Tensor,
+        prompt,
+        num_inference_steps=50,
+        num_actual_inference_steps=None,
+        guidance_scale=1.0,
+        eta=0.0,
+        **kwds,
     ):
         """
         invert a real image into noise map with determinisc DDIM inversion
@@ -231,8 +231,8 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
                     self.scheduler.alphas_cumprod[timesteps[i - 1]] if i > 0 else self.scheduler.final_alpha_cumprod
                 )
 
-                mu = alpha_prod_t ** 0.5
-                mu_prev = alpha_prod_t_prev ** 0.5
+                mu = alpha_prod_t**0.5
+                mu_prev = alpha_prod_t_prev**0.5
                 sigma = (1 - alpha_prod_t) ** 0.5
                 sigma_prev = (1 - alpha_prod_t_prev) ** 0.5
 
@@ -244,10 +244,10 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
         return latent
 
     def step(
-            self,
-            model_output: torch.FloatTensor,
-            timestep: int,
-            x: torch.FloatTensor,
+        self,
+        model_output: torch.FloatTensor,
+        timestep: int,
+        x: torch.FloatTensor,
     ):
         """
         predict the sample of the next step in the denoise process.
@@ -302,19 +302,24 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
 
     @torch.no_grad()
     def cal_latent(
-            self,
-            num_inference_steps,
-            guidance_scale,
-            img_noise_0,
-            img_noise_1,
-            text_embeddings_0,
-            text_embeddings_1,
-            alpha,
+        self,
+        num_inference_steps,
+        guidance_scale,
+        img_noise_0,
+        img_noise_1,
+        text_embeddings_0,
+        text_embeddings_1,
+        lora_0,
+        lora_1,
+        alpha,
     ):
         latents = slerp(img_noise_0, img_noise_1, alpha)
         text_embeddings = (1 - alpha) * text_embeddings_0 + alpha * text_embeddings_1
 
         self.scheduler.set_timesteps(num_inference_steps)
+
+        if self.use_lora:
+            self.unet = lora.load_lora(self.unet, lora_0, lora_1, alpha)
 
         for i, t in enumerate(tqdm.tqdm(self.scheduler.timesteps, desc=f"DDIM Sampler, alpha={alpha}")):
 
@@ -350,25 +355,25 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
         return text_embeddings
 
     def __call__(
-            self,
-            use_lora=False,
-            img_path_0=None,
-            img_path_1=None,
-            prompt_0="",
-            prompt_1="",
-            batch_size=1,
-            height=512,
-            width=512,
-            num_inference_steps=50,
-            num_actual_inference_steps=None,
-            guidance_scale=1,
-            attn_beta=0,
-            lamd=0.6,
-            output_path="./results",
-            num_frames=16,
-            progress=tqdm,
-            save_intermediates=False,
-            **kwds,
+        self,
+        use_lora=False,
+        img_path_0=None,
+        img_path_1=None,
+        prompt_0="",
+        prompt_1="",
+        batch_size=1,
+        height=512,
+        width=512,
+        num_inference_steps=50,
+        num_actual_inference_steps=None,
+        guidance_scale=1,
+        attn_beta=0,
+        lamd=0.6,
+        output_path="./results",
+        num_frames=16,
+        progress=tqdm,
+        save_intermediates=False,
+        **kwds,
     ):
         self.scheduler.set_timesteps(num_inference_steps)
         self.output_path = output_path
@@ -380,9 +385,11 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
         img_0 = Image.open(img_path_0).convert("RGB")
         img_1 = Image.open(img_path_1).convert("RGB")
 
+        train_lora_flag = False
         if self.use_lora:
-            lora.train_lora(img_0, prompt_0, 'lora_0')
-            lora.train_lora(img_1, prompt_1, 'lora_1')
+            if train_lora_flag:
+                lora.train_lora(img_0, prompt_0, "lora_0")
+                lora.train_lora(img_1, prompt_1, "lora_1")
             lora_0 = torch.load("./lora/lora_0/lora_0.ckpt")
             lora_1 = torch.load("./lora/lora_1/lora_1.ckpt")
 
@@ -391,7 +398,12 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
         img_0 = get_img(img_0)
         img_1 = get_img(img_1)
 
+        if self.use_lora:
+            self.unet = lora.load_lora(self.unet, lora_0, lora_1, 0)
         img_noise_0 = self.ddim_inversion(self.image2latent(img_0), text_embeddings_0)
+
+        if self.use_lora:
+            self.unet = lora.load_lora(self.unet, lora_0, lora_1, 1)
         img_noise_1 = self.ddim_inversion(self.image2latent(img_1), text_embeddings_1)
 
         print("latents shape: ", img_noise_0.shape)
@@ -401,12 +413,13 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
         def morph(alpha_list, progress, desc):
             images = []
             ######################## GENERATE PICTURE 0 ########################
-            if self.use_lora:
-                self.unet = lora.load_lora(self.unet, lora_0, lora_1, 0.0)
+            # if self.use_lora:
+            #     self.unet = lora.load_lora(self.unet, lora_0, lora_1, 0)
+
             attn_processor_dict = {}
             for k in self.unet.attn_processors.keys():
                 if do_replace_attn(k):
-                    if (self.use_lora):
+                    if self.use_lora:
                         attn_processor_dict[k] = StoreProcessor(self.unet.attn_processors[k], self.img0_dict, k)
                     else:
                         attn_processor_dict[k] = StoreProcessor(original_processor, self.img0_dict, k)
@@ -421,6 +434,8 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
                 img_noise_1,
                 text_embeddings_0,
                 text_embeddings_1,
+                lora_0,
+                lora_1,
                 alpha_list[0],
             )
             first_image = self.latent2image(latents)
@@ -429,18 +444,18 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
                 first_image.save(f"{self.output_path}/{0:02d}.png")
 
             ######################## GENERATE PICTURE 1 ########################
-            if self.use_lora:
-                self.unet = lora.load_lora(self.unet, lora_0, lora_1, 1.0)
+            # if self.use_lora:
+            #     self.unet = lora.load_lora(self.unet, lora_0, lora_1, 1)
+
             attn_processor_dict = {}
             for k in self.unet.attn_processors.keys():
                 if do_replace_attn(k):
-                    if (self.use_lora):
+                    if self.use_lora:
                         attn_processor_dict[k] = StoreProcessor(self.unet.attn_processors[k], self.img0_dict, k)
                     else:
                         attn_processor_dict[k] = StoreProcessor(original_processor, self.img0_dict, k)
                 else:
                     attn_processor_dict[k] = self.unet.attn_processors[k]
-
             self.unet.set_attn_processor(attn_processor_dict)
 
             latents = self.cal_latent(
@@ -450,6 +465,8 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
                 img_noise_1,
                 text_embeddings_0,
                 text_embeddings_1,
+                lora_0,
+                lora_1,
                 alpha_list[-1],
             )
             last_image = self.latent2image(latents)
@@ -460,9 +477,10 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
             ######################## GENERATE INTERMEDIATE PICTURES i ########################
             for i in progress.tqdm(range(1, num_frames - 1), desc=desc):
                 alpha = alpha_list[i]
+                # if self.use_lora:
+                #     self.unet = lora.load_lora(self.unet, lora_0, lora_1, alpha)
+
                 attn_processor_dict = {}
-                if self.use_lora:
-                    self.unet = lora.load_lora(self.unet, lora_0, lora_1, alpha)
                 for k in self.unet.attn_processors.keys():
                     if do_replace_attn(k):
                         if self.use_lora:
@@ -475,7 +493,6 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
                             )
                     else:
                         attn_processor_dict[k] = self.unet.attn_processors[k]
-
                 self.unet.set_attn_processor(attn_processor_dict)
 
                 latents = self.cal_latent(
@@ -485,6 +502,8 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
                     img_noise_1,
                     text_embeddings_0,
                     text_embeddings_1,
+                    lora_0,
+                    lora_1,
                     alpha_list[i],
                 )
                 image = self.latent2image(latents)
