@@ -3,3 +3,4 @@ venv
 config.py
 .idea
 qodana.yaml
+bot.py
