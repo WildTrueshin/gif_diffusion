@@ -10,14 +10,14 @@ pipeline.to("cuda")
 
 images = pipeline(
     use_lora=True,
-    img_path_0="./gif_diffusion/photos/wave_paint.png",
-    img_path_1="./gif_diffusion/photos/wave_real.jpg",
-    prompt_0="A picture of wave",
-    prompt_1="A real wave",
+    img_path_0="./gif_diffusion/photos/house0.jpg",
+    img_path_1="./gif_diffusion/photos/house1.jpg",
+    prompt_0="simple house",
+    prompt_1="Christmas house",
     lamd=0.6,  # Lambda for self-attention replacement
     output_path="./saved",
-    num_frames=20,
+    num_frames=16,
     save_intermediates=False,
 )
 
-images[0].save(f"./saved/output2.gif", save_all=True, append_images=images[1:], duration=200, loop=0)
+images[0].save(f"./saved/houses.gif", save_all=True, append_images=images[1:], duration=300, loop=0)

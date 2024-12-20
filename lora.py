@@ -21,7 +21,7 @@ from diffusers import (
 )
 
 
-def train_lora(image, prompt: str, save_dir: str):
+def train_lora(image, prompt: str, image_name: str):
     model_path = "stabilityai/stable-diffusion-2-1-base"
     unet = UNet2DConditionModel.from_pretrained(model_path, subfolder="unet", revision=None)
 
@@ -172,10 +172,10 @@ def train_lora(image, prompt: str, save_dir: str):
         optimizer.zero_grad()
 
     LoraLoaderMixin.save_lora_weights(
-        save_directory=f"./lora/{save_dir}",
+        save_directory=f"./lora",
         unet_lora_layers=unet_lora_layers,
         text_encoder_lora_layers=None,
-        weight_name=f"{save_dir}.ckpt",
+        weight_name=f"{image_name}.ckpt",
         safe_serialization=False,
     )
 
@@ -190,4 +190,4 @@ def load_lora(unet, lora_0, lora_1, alpha):
 
 if __name__ == '__main__':
     train_lora(image=Image.open('./gif_diffusion/photos/wave_paint.png').convert('RGB'), prompt='A paint of wave',
-           save_dir='lora_0')
+               image_name='lora_0')

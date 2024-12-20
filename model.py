@@ -385,13 +385,17 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
         img_0 = Image.open(img_path_0).convert("RGB")
         img_1 = Image.open(img_path_1).convert("RGB")
 
-        train_lora_flag = False
+        image_name_0 = img_path_0.split("/")[-1].split(".")[0]
+        image_name_1 = img_path_1.split("/")[-1].split(".")[0]
+        lora_exists_0 = os.path.isfile(f"./lora/{image_name_0}.ckpt")
+        lora_exists_1 = os.path.isfile(f"./lora/{image_name_1}.ckpt")
         if self.use_lora:
-            if train_lora_flag:
-                lora.train_lora(img_0, prompt_0, "lora_0")
-                lora.train_lora(img_1, prompt_1, "lora_1")
-            lora_0 = torch.load("./lora/lora_0/lora_0.ckpt")
-            lora_1 = torch.load("./lora/lora_1/lora_1.ckpt")
+            if not lora_exists_0:
+                lora.train_lora(img_0, prompt_0, image_name_0)
+            if not lora_exists_1:
+                lora.train_lora(img_1, prompt_1, image_name_1)
+            lora_0 = torch.load(f"./lora/{image_name_0}.ckpt")
+            lora_1 = torch.load(f"./lora/{image_name_1}.ckpt")
 
         text_embeddings_0 = self.get_text_embeddings(prompt_0, guidance_scale, batch_size)
         text_embeddings_1 = self.get_text_embeddings(prompt_1, guidance_scale, batch_size)
@@ -519,6 +523,6 @@ class DiffMorpherPipeline(StableDiffusionPipeline):
         with torch.no_grad():
             alpha_list = list(torch.linspace(0, 1, num_frames))
             print(alpha_list)
-            images = [img_0] + morph(alpha_list, progress, "Sampling...") + [img_1]
+            images = morph(alpha_list, progress, "Sampling...")
 
         return images
